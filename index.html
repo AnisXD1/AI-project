@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101522">
+  <title>String Breeder — a genetic algorithm demo</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101522; --panel:#191f2e; --line:#30394d; --text:#edf1fa; --muted:#aab4c8; --accent:#9ce4c2; --blue:#a8c7ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(ellipse at 75% -15%, #273653 0, transparent 48%),var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif; }
+    main { width:min(940px,calc(100% - 32px)); margin:48px auto 64px; }
+    h1 { font-size:clamp(2rem,6vw,3.4rem); line-height:1.08; margin:0 0 12px; letter-spacing:-.04em; }
+    h2 { font-size:1.2rem; margin:0 0 12px; }
+    p { margin:0 0 14px; color:var(--muted); }
+    .eyebrow { color:var(--accent); font-weight:700; letter-spacing:.12em; text-transform:uppercase; font-size:.78rem; }
+    .intro { max-width:700px; margin-bottom:28px; }
+    .panel { background:color-mix(in srgb,var(--panel) 94%,transparent); border:1px solid var(--line); border-radius:16px; padding:22px; margin:16px 0; box-shadow:0 12px 36px #0002; }
+    label { display:block; font-weight:650; margin-bottom:7px; }
+    input[type="text"],input[type="number"] { width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:#0f1420; color:var(--text); font:inherit; }
+    input:focus-visible,button:focus-visible { outline:3px solid var(--blue); outline-offset:2px; }
+    .controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:16px; }
+    .range-row { display:flex; align-items:center; gap:12px; min-height:44px; }
+    input[type="range"] { accent-color:var(--accent); flex:1; }
+    output { min-width:48px; color:var(--accent); font-variant-numeric:tabular-nums; }
+    .buttons { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+    button { border:1px solid var(--line); border-radius:9px; background:#252e40; color:var(--text); font:inherit; font-weight:700; padding:10px 16px; cursor:pointer; }
+    button.primary { background:var(--accent); color:#102019; border-color:var(--accent); }
+    button:hover:not(:disabled) { filter:brightness(1.1); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .stat { border:1px solid var(--line); border-radius:10px; padding:12px; background:#111725; }
+    .stat span { display:block; color:var(--muted); font-size:.85rem; }
+    .stat strong { font-size:1.3rem; font-variant-numeric:tabular-nums; }
+    .best { overflow-wrap:anywhere; min-height:48px; padding:14px; border-radius:9px; background:#0f1420; border:1px solid var(--line); font:600 1.05rem/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .candidates { display:grid; gap:8px; margin-top:12px; }
+    .candidate { display:grid; grid-template-columns:55px 1fr 54px; gap:10px; align-items:center; color:var(--muted); font-size:.9rem; }
+    .candidate code { overflow-wrap:anywhere; color:var(--text); font-size:.9rem; }
+    .candidate b { text-align:right; color:var(--blue); font-variant-numeric:tabular-nums; }
+    .status { min-height:24px; color:var(--accent); margin-top:12px; }
+    .steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .step { border-top:2px solid var(--accent); padding-top:10px; }
+    .step strong { display:block; margin-bottom:4px; }
+    .note { border-left:3px solid var(--blue); padding:10px 14px; background:#121b2a; border-radius:0 8px 8px 0; }
+    @media(max-width:650px) { main { margin-top:30px; } .controls,.steps { grid-template-columns:1fr; } .stats { grid-template-columns:1fr; } .stat { display:flex; justify-content:space-between; align-items:center; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="intro">
+      <div class="eyebrow">Interactive experiment</div>
+      <h1>String Breeder</h1>
+      <p>A tiny genetic algorithm that evolves random strings toward a target. It is a useful way to see selection, crossover, and mutation working together.</p>
+    </header>
+
+    <section class="panel" aria-labelledby="setup-title">
+      <h2 id="setup-title">Choose a target</h2>
+      <label for="target">Target string</label>
+      <input id="target" type="text" maxlength="80" value="HELLO, WORLD!" autocomplete="off" spellcheck="false">
+      <div class="controls">
+        <div>
+          <label for="mutation">Mutation chance per character</label>
+          <div class="range-row"><input id="mutation" type="range" min="0" max="100" value="5"><output id="mutation-value" for="mutation">5%</output></div>
+        </div>
+        <div>
+          <label for="population">Population size</label>
+          <input id="population" type="number" min="10" max="300" step="10" value="100">
+        </div>
+      </div>
+      <div class="buttons">
+        <button class="primary" id="start">Start evolving</button>
+        <button id="step">Next generation</button>
+        <button id="reset">Reset</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="progress-title" aria-live="polite">
+      <h2 id="progress-title">Evolution</h2>
+      <div class="stats">
+        <div class="stat"><span>Generation</span><strong id="generation">0</strong></div>
+        <div class="stat"><span>Best match</span><strong id="fitness">0%</strong></div>
+        <div class="stat"><span>Target length</span><strong id="length">13</strong></div>
+      </div>
+      <div class="best" id="best" aria-label="Best candidate">Press “Next generation” or “Start evolving” to begin.</div>
+      <div class="candidates" id="candidates" aria-label="Top candidates"></div>
+      <div class="status" id="status" role="status">Ready.</div>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <h2 id="how-title">How the “breeding” works</h2>
+      <div class="steps">
+        <div class="step"><strong>1. Score (selection)</strong><p>Each guess earns a point for every character that matches the target at the same position. The percentage is its fitness.</p></div>
+        <div class="step"><strong>2. Combine (crossover)</strong><p>The two highest-scoring guesses become parents. Each child takes each character from one parent or the other.</p></div>
+        <div class="step"><strong>3. Change (mutation)</strong><p>Each character has the chosen chance to change randomly. Mutation adds variety so the guesses can explore new possibilities.</p></div>
+      </div>
+      <p class="note" style="margin-top:18px"><strong>Important:</strong> This is a toy genetic algorithm, not a learning AI and not real biological crossbreeding. It can take a long time to find some targets; mutation and random chance affect how quickly it succeeds.</p>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const targetInput = document.querySelector('#target');
+      const mutationInput = document.querySelector('#mutation');
+      const populationInput = document.querySelector('#population');
+      const generationOutput = document.querySelector('#generation');
+      const fitnessOutput = document.querySelector('#fitness');
+      const lengthOutput = document.querySelector('#length');
+      const bestOutput = document.querySelector('#best');
+      const candidatesOutput = document.querySelector('#candidates');
+      const statusOutput = document.querySelector('#status');
+      const startButton = document.querySelector('#start');
+      const stepButton = document.querySelector('#step');
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?\'-';
+      let population = [];
+      let generation = 0;
+      let timer = null;
+
+      const target = () => targetInput.value;
+      const fitness = (guess) => {
+        const goal = target();
+        if (!goal.length) return 0;
+        let matches = 0;
+        for (let i = 0; i < goal.length; i++) if (guess[i] === goal[i]) matches++;
+        return matches / goal.length;
+      };
+      const randomCharacter = () => alphabet[Math.floor(Math.random() * alphabet.length)];
+      const randomGuess = () => Array.from({ length: target().length }, randomCharacter).join('');
+      const ranked = () => [...population].sort((a, b) => fitness(b) - fitness(a));
+
+      function render() {
+        const ordered = ranked();
+        const best = ordered[0] || '';
+        generationOutput.textContent = generation.toLocaleString();
+        fitnessOutput.textContent = `${Math.round(fitness(best) * 100)}%`;
+        lengthOutput.textContent = target().length;
+        bestOutput.textContent = best || 'Enter a target string to begin.';
+        candidatesOutput.replaceChildren();
+        ordered.slice(0, 5).forEach((guess, index) => {
+          const row = document.createElement('div');
+          row.className = 'candidate';
+          const label = document.createElement('span');
+          label.textContent = `Guess ${index + 1}`;
+          const code = document.createElement('code');
+          code.textContent = guess;
+          const score = document.createElement('b');
+          score.textContent = `${Math.round(fitness(guess) * 100)}%`;
+          row.append(label, code, score);
+          candidatesOutput.append(row);
+        });
+      }
+
+      function stop(message) {
+        if (timer !== null) window.clearInterval(timer);
+        timer = null;
+        startButton.textContent = 'Start evolving';
+        statusOutput.textContent = message;
+      }
+
+      function reset() {
+        stop('Population reset.');
+        const goal = target();
+        if (!goal.length) {
+          population = [];
+          generation = 0;
+          render();
+          statusOutput.textContent = 'Enter a target string to begin.';
+          return;
+        }
+        const size = Math.max(10, Math.min(300, Number(populationInput.value) || 100));
+        populationInput.value = size;
+        population = Array.from({ length: size }, randomGuess);
+        generation = 0;
+        render();
+      }
+
+      function nextGeneration() {
+        if (!target().length) {
+          statusOutput.textContent = 'Enter a target string before evolving.';
+          return false;
+        }
+        if (!population.length) reset();
+        const ordered = ranked();
+        const parentA = ordered[0];
+        const parentB = ordered[1] || ordered[0];
+        const size = population.length;
+        const mutationRate = Number(mutationInput.value) / 100;
+        const next = [parentA]; // Keep the best guess (elitism) so progress is not lost.
+        while (next.length < size) {
+          let child = '';
+          for (let i = 0; i < target().length; i++) {
+            let character = Math.random() < 0.5 ? parentA[i] : parentB[i];
+            if (Math.random() < mutationRate) character = randomCharacter();
+            child += character;
+          }
+          next.push(child);
+        }
+        population = next;
+        generation++;
+        render();
+        if (fitness(ranked()[0]) === 1) {
+          stop(`Target reached in ${generation.toLocaleString()} generation${generation === 1 ? '' : 's'}!`);
+          return false;
+        }
+        statusOutput.textContent = `Generation ${generation.toLocaleString()} — breeding the two best guesses.`;
+        return true;
+      }
+
+      document.querySelector('#mutation-value').textContent = `${mutationInput.value}%`;
+      mutationInput.addEventListener('input', () => {
+        document.querySelector('#mutation-value').textContent = `${mutationInput.value}%`;
+      });
+      targetInput.addEventListener('change', reset);
+      populationInput.addEventListener('change', reset);
+      document.querySelector('#reset').addEventListener('click', reset);
+      stepButton.addEventListener('click', () => {
+        if (timer !== null) stop('Paused.');
+        nextGeneration();
+      });
+      startButton.addEventListener('click', () => {
+        if (timer !== null) {
+          stop('Paused.');
+          return;
+        }
+        if (!target().length) {
+          statusOutput.textContent = 'Enter a target string before evolving.';
+          return;
+        }
+        if (!population.length) reset();
+        startButton.textContent = 'Pause';
+        statusOutput.textContent = 'Evolution running…';
+        timer = window.setInterval(() => {
+          if (!nextGeneration()) return;
+        }, 30);
+      });
+      reset();
+    })();
+  </script>
+</body>
+</html>
